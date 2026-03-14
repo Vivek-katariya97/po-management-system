@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create PO - PO Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="css/styles.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light fixed-top shadow-sm">
+        <div class="container">
+            <a class="navbar-brand" href="index.html">PO Manager</a>
+            <div id="navItems">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-center">
+                    <li class="nav-item">
+                        <a class="nav-link fw-semibold" href="index.html">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link fw-semibold active text-primary" href="create-po.html">Create PO</a>
+                    </li>
+                    <li class="nav-item ms-lg-4">
+                        <button class="btn btn-outline-danger btn-sm" onclick="logout()">Sign out</button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container animate-fade-in" style="margin-top: 100px; display: none;" id="appContent">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="fw-bold mb-1">Create Purchase Order</h2>
+                <p class="text-muted mb-0">Draft a new order and generate marketing details</p>
+            </div>
+            <a href="index.html" class="btn btn-outline-secondary">← Back</a>
+        </div>
+
+        <div class="glass-card p-4 shadow-sm mb-5">
+            <form id="createPoForm">
+                <div class="row mb-5">
+                    <div class="col-md-5">
+                        <label class="form-label fw-bold text-muted text-uppercase" style="font-size: 0.85rem; letter-spacing: 0.5px;">Select Vendor</label>
+                        <select id="vendorSelect" class="form-select form-select-lg shadow-sm" style="border-radius: 10px;" required>
+                            <option value="">Loading vendors...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mt-5 mb-3 border-bottom pb-2">
+                    <h5 class="fw-bold mb-0">Order Items</h5>
+                    <button type="button" class="btn btn-sm btn-primary rounded-pill shadow-sm px-3" id="addRowBtn">+ Add Product</button>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table borderless" id="itemsTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 35%;">Product</th>
+                                <th style="width: 10%;">Qty</th>
+                                <th style="width: 15%;">Unit Price</th>
+                                <th style="width: 35%;">Marketing Description</th>
+                                <th style="width: 5%;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="itemsBody">
+                            <!-- Rows added dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-5 pt-4 text-end">
+                    <button type="submit" class="btn btn-success btn-lg px-5fw-bold shadow" id="submitBtn">Submit Purchase Order</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="authContainer" class="container mt-5 pt-5 text-center text-muted">
+        <div class="spinner-border text-primary mt-5" role="status"></div>
+        <h5 class="mt-3">Authorizing...</h5>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let productsGlobal = [];
+
+        function loadCreatePOForm() {
+            // Fetch Vendors
+            apiCall('/vendors').then(vendors => {
+                const select = $('#vendorSelect');
+                select.empty();
+                select.append('<option value="">-- Select optimal vendor --</option>');
+                vendors.forEach(v => {
+                    select.append(`<option value="${v.id}">${v.name} (★ ${v.rating || 'N/A'})</option>`);
+                });
+            });
+
+            // Fetch Products
+            apiCall('/products').then(products => {
+                productsGlobal = products;
+                if($('#itemsBody tr').length === 0) {
+                    addRow(); // auto add first row
+                }
+            });
+        }
+
+        function getProductOptionsHtml() {
+            let options = '<option value="">Choose product...</option>';
+            productsGlobal.forEach(p => {
+                options += `<option value="${p.id}" data-price="${p.unit_price}" data-name="${p.name}" data-category="${p.category}">${p.name} ($${p.unit_price})</option>`;
+            });
+            return options;
+        }
+
+        function addRow() {
+            const rowId = 'row_' + Date.now();
+            const rowHtml = `
+                <tr id="${rowId}" class="animate-fade-in align-middle">
+                    <td class="py-3">
+                        <select class="form-select product-select shadow-sm" required>
+                            ${getProductOptionsHtml()}
+                        </select>
+                    </td>
+                    <td class="py-3">
+                        <input type="number" class="form-control quantity-input shadow-sm" min="1" value="1" required>
+                    </td>
+                    <td class="py-3">
+                        <div class="input-group shadow-sm">
+                            <span class="input-group-text">$</span>
+                            <input type="text" class="form-control price-input bg-white" readonly placeholder="0.00">
+                        </div>
+                    </td>
+                    <td class="py-3">
+                        <div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="badge bg-light text-dark border">AI Gen text</span>
+                                <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 ai-btn fw-bold">Generate ✨</button>
+                            </div>
+                            <textarea class="form-control desc-output shadow-sm text-muted" style="font-size: 0.85rem; background: #fafafa;" rows="2" placeholder="Let GenAI draft the perfect description..." readonly></textarea>
+                        </div>
+                    </td>
+                    <td class="text-center py-3">
+                        <button type="button" class="btn btn-outline-danger btn-sm remove-row rounded-circle" style="width: 32px; height: 32px; padding: 0; line-height: 28px;" title="Remove">✕</button>
+                    </td>
+                </tr>
+            `;
+            $('#itemsBody').append(rowHtml);
+        }
+
+        $(document).ready(function() {
+            $('#addRowBtn').click(addRow);
+
+            $(document).on('click', '.remove-row', function() {
+                if ($('#itemsBody tr').length > 1) {
+                    $(this).closest('tr').remove();
+                } else {
+                    alert('At least one line item is required.');
+                }
+            });
+
+            $(document).on('change', '.product-select', function() {
+                const selectedOpt = $(this).find('option:selected');
+                const price = selectedOpt.data('price');
+                $(this).closest('tr').find('.price-input').val(price ? parseFloat(price).toFixed(2) : '');
+                $(this).closest('tr').find('.desc-output').val('');
+            });
+
+            $(document).on('click', '.ai-btn', function() {
+                const row = $(this).closest('tr');
+                const selectedOpt = row.find('.product-select option:selected');
+                const productId = selectedOpt.val();
+                
+                if (!productId) {
+                    alert('Select a product to generate text.');
+                    return;
+                }
+                
+                const name = selectedOpt.data('name');
+                const category = selectedOpt.data('category') || 'General';
+                const descBox = row.find('.desc-output');
+                const btn = $(this);
+                
+                btn.prop('disabled', true).text('Working...');
+                
+                apiCall('/generate-description', {
+                    method: 'POST',
+                    body: JSON.stringify({ product_name: String(name), category: String(category) })
+                })
+                .then(data => {
+                    descBox.val(data.description);
+                })
+                .catch(err => {
+                    descBox.val('AI generation omitted. Ensure token and key exist.');
+                })
+                .finally(() => {
+                    btn.prop('disabled', false).text('Generate ✨');
+                });
+            });
+
+            $('#createPoForm').submit(function(e) {
+                e.preventDefault();
+                
+                const vendorId = $('#vendorSelect').val();
+                if (!vendorId) return;
+                
+                const items = [];
+                let hasErrors = false;
+                
+                $('.product-select').each(function() {
+                    const tr = $(this).closest('tr');
+                    const productId = $(this).val();
+                    const qty = tr.find('.quantity-input').val();
+                    
+                    if (!productId || qty <= 0) {
+                        hasErrors = true;
+                    } else {
+                        items.push({
+                            product_id: parseInt(productId),
+                            quantity: parseInt(qty)
+                        });
+                    }
+                });
+                
+                if (hasErrors || items.length === 0) {
+                    alert('Line items are incomplete/invalid.');
+                    return;
+                }
+                
+                $('#submitBtn').prop('disabled', true).text('Processing...').append('<span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>');
+                
+                apiCall('/purchase-orders', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        vendor_id: parseInt(vendorId),
+                        items: items
+                    })
+                })
+                .then(res => {
+                    alert('PO Generated Complete. Routing to dashboard.');
+                    window.location.href = 'index.html';
+                })
+                .catch(err => {
+                    alert('Submission error: ' + err.message);
+                    $('#submitBtn').prop('disabled', false).text('Submit Purchase Order');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
